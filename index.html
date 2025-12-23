@@ -1,0 +1,38 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Panorama</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    
+    <style>
+        /* Make the viewer fill the screen */
+        #panorama {
+            width: 100vw;
+            height: 100vh;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="panorama"></div>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    
+    <script>
+    pannellum.viewer('panorama', {
+        "type": "equirectangular",
+        "panorama": "./panorama.jpg", /* Your image filename here */
+        "autoLoad": true,             /* Load immediately */
+        "autoRotate": -2              /* Optional: Slow rotation to the left */
+    });
+    </script>
+
+</body>
+</html>

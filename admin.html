@@ -1,0 +1,531 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoChallenge Admin</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: #0f0f0f;
+            color: #e8e8e8;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 48px 16px;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 560px;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin: 0 0 32px;
+            color: #fff;
+        }
+
+        h1 span { color: #1a73e8; }
+
+        section {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        section h2 {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #888;
+            margin: 0 0 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 6px;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px 14px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 8px;
+            color: #e8e8e8;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            margin-bottom: 14px;
+        }
+
+        input:focus { border-color: #1a73e8; }
+        input:last-child { margin-bottom: 0; }
+
+        .row { display: flex; gap: 12px; }
+        .row input { flex: 1; }
+
+        .save-btn {
+            background: none;
+            border: 1px solid #333;
+            color: #aaa;
+            padding: 7px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: border-color 0.2s, color 0.2s;
+            margin-top: 4px;
+        }
+
+        .save-btn:hover { border-color: #555; color: #ddd; }
+        .save-btn.saved { border-color: #2e7d32; color: #66bb6a; }
+
+        .primary-btn {
+            width: 100%;
+            padding: 12px;
+            background: #1a73e8;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 4px;
+        }
+
+        .primary-btn:hover    { background: #1557b0; }
+        .primary-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+        /* Progress steps */
+        #steps {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        #steps.visible { display: flex; }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: #555;
+            transition: color 0.3s;
+        }
+
+        .step.active  { color: #e8e8e8; }
+        .step.done    { color: #66bb6a; }
+        .step.error   { color: #ef5350; }
+
+        .step-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #333;
+            border-top-color: #1a73e8;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #result {
+            display: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 16px;
+            line-height: 1.5;
+        }
+
+        #result.success { background: #1b2e1b; border: 1px solid #2e7d32; color: #a5d6a7; }
+        #result.error   { background: #2e1b1b; border: 1px solid #7d2e2e; color: #ef9a9a; }
+
+        a.view-link {
+            color: #64b5f6;
+            text-decoration: none;
+        }
+        a.view-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>GeoChallenge <span>Admin</span></h1>
+
+    <!-- GitHub Settings -->
+    <section>
+        <h2>GitHub Settings</h2>
+        <label>Personal Access Token (repo scope)</label>
+        <input type="password" id="gh-token" placeholder="ghp_…" />
+        <div class="row">
+            <div style="flex:1">
+                <label>Owner</label>
+                <input type="text" id="gh-owner" placeholder="your-username" style="margin-bottom:0" />
+            </div>
+            <div style="flex:1">
+                <label>Repository</label>
+                <input type="text" id="gh-repo" placeholder="GeoChallenge" style="margin-bottom:0" />
+            </div>
+        </div>
+        <div style="margin-top:12px">
+            <button class="save-btn" id="save-settings-btn">Save settings</button>
+        </div>
+    </section>
+
+    <!-- Load Panorama -->
+    <section>
+        <h2>Load Panorama</h2>
+        <label>Google Maps Street View URL</label>
+        <input type="text" id="maps-url"
+               placeholder="https://www.google.com/maps/@…" />
+        <button class="primary-btn" id="submit-btn">Fetch &amp; Save</button>
+
+        <div id="steps">
+            <div class="step" id="step-parse">
+                <span class="step-icon">○</span> Parse URL
+            </div>
+            <div class="step" id="step-tiles">
+                <span class="step-icon">○</span> Fetch &amp; stitch tiles
+            </div>
+            <div class="step" id="step-list">
+                <span class="step-icon">○</span> Check existing files
+            </div>
+            <div class="step" id="step-save">
+                <span class="step-icon">○</span> Save to repository
+            </div>
+        </div>
+
+        <div id="result"></div>
+    </section>
+
+</div>
+
+<script>
+// ── Persist settings ───────────────────────────────────────────────────────
+const tokenEl  = document.getElementById('gh-token');
+const ownerEl  = document.getElementById('gh-owner');
+const repoEl   = document.getElementById('gh-repo');
+const saveBtn  = document.getElementById('save-settings-btn');
+
+function loadSettings() {
+    tokenEl.value = localStorage.getItem('gc_token') || '';
+    ownerEl.value = localStorage.getItem('gc_owner') || '';
+    repoEl.value  = localStorage.getItem('gc_repo')  || '';
+}
+
+saveBtn.addEventListener('click', () => {
+    localStorage.setItem('gc_token', tokenEl.value.trim());
+    localStorage.setItem('gc_owner', ownerEl.value.trim());
+    localStorage.setItem('gc_repo',  repoEl.value.trim());
+    saveBtn.textContent = 'Saved ✓';
+    saveBtn.classList.add('saved');
+    setTimeout(() => { saveBtn.textContent = 'Save settings'; saveBtn.classList.remove('saved'); }, 2000);
+});
+
+loadSettings();
+
+// ── Step UI helpers ────────────────────────────────────────────────────────
+const stepsEl  = document.getElementById('steps');
+const resultEl = document.getElementById('result');
+
+function setStep(id, state, label) {
+    const el   = document.getElementById(id);
+    const icon = el.querySelector('.step-icon');
+    el.className = 'step ' + state;
+    if (label) el.childNodes[1].textContent = ' ' + label;
+    if (state === 'active') {
+        icon.innerHTML = '<span class="spinner"></span>';
+    } else if (state === 'done') {
+        icon.textContent = '✓';
+    } else if (state === 'error') {
+        icon.textContent = '✕';
+    } else {
+        icon.textContent = '○';
+    }
+}
+
+function showResult(msg, isError = false) {
+    resultEl.innerHTML = msg;
+    resultEl.className = isError ? 'error' : 'success';
+    resultEl.style.display = 'block';
+}
+
+function resetUI() {
+    stepsEl.classList.remove('visible');
+    resultEl.style.display = 'none';
+    ['step-parse','step-tiles','step-list','step-save'].forEach(id => setStep(id, ''));
+}
+
+// ── Parse Google Maps URL ──────────────────────────────────────────────────
+function parseGoogleMapsUrl(raw) {
+    let url;
+    try { url = new URL(raw); } catch (_) { return null; }
+    if (!url.hostname.includes('google.com')) return null;
+
+    const result = { panoId: null, lat: null, lng: null };
+
+    const atMatch = url.pathname.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+    if (atMatch) {
+        result.lat = parseFloat(atMatch[1]);
+        result.lng = parseFloat(atMatch[2]);
+    }
+
+    // pano ID lives in the !1s segment of the data= param
+    const panoMatch = raw.match(/!1s([A-Za-z0-9_\-]{10,})/);
+    if (panoMatch) result.panoId = panoMatch[1];
+
+    return (result.panoId || result.lat) ? result : null;
+}
+
+// ── Get pano ID from coords (unofficial JSONP) ─────────────────────────────
+function getPanoId(lat, lng) {
+    return new Promise((resolve, reject) => {
+        const cbName = '_gsvcb_' + Date.now();
+        const script = document.createElement('script');
+        const timer  = setTimeout(() => { cleanup(); reject(new Error('Street View lookup timed out')); }, 10000);
+
+        function cleanup() {
+            clearTimeout(timer);
+            if (document.head.contains(script)) document.head.removeChild(script);
+            delete window[cbName];
+        }
+
+        window[cbName] = function(data) {
+            cleanup();
+            try {
+                const panoId =
+                    (data[1] && data[1][0] && data[1][0][0] && data[1][0][0][0] && data[1][0][0][0][1]) ||
+                    (data[0] && data[0][0] && data[0][0][0] && data[0][0][0][0]);
+                if (!panoId || typeof panoId !== 'string') throw new Error();
+                resolve(panoId);
+            } catch (_) {
+                reject(new Error('No Street View coverage at this location'));
+            }
+        };
+
+        script.onerror = () => { cleanup(); reject(new Error('Could not reach Street View service')); };
+        const pb = `!1m5!1sapiv3!5sUS!11m2!1m1!1b0!2m4!1m2!3d${lat}!4d${lng}!2d50!3m10!2m2!1sen!2sUS!9m1!1e2!11m4!1m3!1e2!2b1!3e2!4m10!1e1!1e2!1e3!1e4!1e8!1e6`;
+        script.src = `https://maps.googleapis.com/maps/api/js/GeoPhotoService.SingleImageSearch?pb=${pb}&callback=${cbName}`;
+        document.head.appendChild(script);
+    });
+}
+
+// ── Stitch panorama tiles ──────────────────────────────────────────────────
+async function stitchPanorama(panoId, onProgress) {
+    const ZOOM = 3;
+    const cols = Math.pow(2, ZOOM);
+    const rows = Math.pow(2, ZOOM - 1);
+    const total = cols * rows;
+    let loaded = 0;
+
+    function tileUrl(x, y) {
+        return `https://cbk0.google.com/cbk?output=tile&panoid=${panoId}&zoom=${ZOOM}&x=${x}&y=${y}`;
+    }
+
+    const firstImg = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => resolve(img);
+        img.onerror = () => reject(new Error('Tile load failed — possible CORS restriction'));
+        img.src = tileUrl(0, 0);
+    });
+
+    const tileW = firstImg.naturalWidth  || 512;
+    const tileH = firstImg.naturalHeight || 512;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = cols * tileW;
+    canvas.height = rows * tileH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(firstImg, 0, 0);
+    onProgress(++loaded / total);
+
+    const remaining = [];
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            if (x === 0 && y === 0) continue;
+            const cx = x, cy = y;
+            remaining.push(new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    ctx.drawImage(img, cx * tileW, cy * tileH);
+                    onProgress(++loaded / total);
+                    resolve();
+                };
+                img.onerror = () => reject(new Error('Tile load failed — possible CORS restriction'));
+                img.src = tileUrl(cx, cy);
+            }));
+        }
+    }
+
+    await Promise.all(remaining);
+
+    try {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        // Strip the data:image/jpeg;base64, prefix
+        return dataUrl.split(',')[1];
+    } catch (e) {
+        if (e.name === 'SecurityError') throw new Error('CORS blocked canvas export');
+        throw e;
+    }
+}
+
+// ── GitHub API helpers ─────────────────────────────────────────────────────
+async function ghFetch(path, opts = {}) {
+    const token = localStorage.getItem('gc_token');
+    const owner = localStorage.getItem('gc_owner');
+    const repo  = localStorage.getItem('gc_repo');
+
+    if (!token || !owner || !repo) throw new Error('GitHub settings are not configured');
+
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}${path}`, {
+        ...opts,
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(opts.headers || {})
+        }
+    });
+
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `GitHub API error ${res.status}`);
+    }
+
+    return res.status === 204 ? null : res.json();
+}
+
+// List root directory, return array of filenames
+async function listRepoFiles() {
+    const items = await ghFetch('/contents/');
+    return items.map(f => f.name);
+}
+
+// Get SHA of an existing file (needed to overwrite it)
+async function getFileSha(filename) {
+    try {
+        const data = await ghFetch(`/contents/${filename}`);
+        return data.sha;
+    } catch (_) {
+        return null; // file doesn't exist yet
+    }
+}
+
+// Commit a file (create or update)
+async function commitFile(filename, base64Content, message, sha = null) {
+    const body = { message, content: base64Content };
+    if (sha) body.sha = sha;
+    return ghFetch(`/contents/${filename}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+}
+
+// Find next geochallenge_XXX increment from a list of filenames
+function nextIncrement(filenames) {
+    let max = 0;
+    for (const name of filenames) {
+        const m = name.match(/^geochallenge_(\d+)\.jpg$/i);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return max + 1;
+}
+
+// ── Main submit flow ───────────────────────────────────────────────────────
+const submitBtn = document.getElementById('submit-btn');
+const mapsUrlEl = document.getElementById('maps-url');
+
+submitBtn.addEventListener('click', async () => {
+    const rawUrl = mapsUrlEl.value.trim();
+    if (!rawUrl) return;
+
+    submitBtn.disabled = true;
+    resetUI();
+    stepsEl.classList.add('visible');
+
+    try {
+        // Step 1 — parse URL
+        setStep('step-parse', 'active');
+        const parsed = parseGoogleMapsUrl(rawUrl);
+        let panoId = parsed?.panoId || null;
+
+        if (!parsed) throw new Error('Could not parse URL — paste a Google Maps Street View link');
+
+        if (!panoId && parsed.lat) {
+            panoId = await getPanoId(parsed.lat, parsed.lng);
+        }
+
+        if (!panoId) throw new Error('No pano ID found and no coordinates to fall back on');
+        setStep('step-parse', 'done', `Pano ID: ${panoId.slice(0, 12)}…`);
+
+        // Step 2 — stitch tiles
+        setStep('step-tiles', 'active');
+        let tilesDone = 0;
+        const base64 = await stitchPanorama(panoId, frac => {
+            const pct = Math.round(frac * 100);
+            if (pct !== tilesDone) {
+                tilesDone = pct;
+                setStep('step-tiles', 'active', `Fetch & stitch tiles (${pct}%)`);
+            }
+        });
+        setStep('step-tiles', 'done', 'Fetch & stitch tiles');
+
+        // Step 3 — check existing files
+        setStep('step-list', 'active');
+        const files = await listRepoFiles();
+        const nextNum  = nextIncrement(files);
+        const newName  = `geochallenge_${nextNum}.jpg`;
+        const curSha   = await getFileSha('cur_geo.jpg');
+        setStep('step-list', 'done', `Next: ${newName}`);
+
+        // Step 4 — commit both files
+        setStep('step-save', 'active');
+        await commitFile(newName, base64, `Add ${newName} from Street View`);
+        await commitFile('cur_geo.jpg', base64, `Update cur_geo.jpg → ${newName}`, curSha);
+        setStep('step-save', 'done', 'Save to repository');
+
+        const owner = localStorage.getItem('gc_owner');
+        const repo  = localStorage.getItem('gc_repo');
+        showResult(
+            `Saved as <strong>${newName}</strong> and <strong>cur_geo.jpg</strong>.<br>` +
+            `<a class="view-link" href="https://${owner}.github.io/${repo}/" target="_blank">View live site →</a>`
+        );
+
+    } catch (err) {
+        // Mark the currently-active step as failed
+        ['step-parse','step-tiles','step-list','step-save'].forEach(id => {
+            if (document.getElementById(id).classList.contains('active')) setStep(id, 'error');
+        });
+        showResult(err.message, true);
+    } finally {
+        submitBtn.disabled = false;
+    }
+});
+</script>
+</body>
+</html>

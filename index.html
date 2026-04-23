@@ -3,34 +3,376 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Panorama</title>
+    <title>GeoChallenge</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
-    
+
     <style>
-        /* Make the viewer fill the screen */
-        #panorama {
-            width: 100vw;
-            height: 95vh;
-        }
+        * { box-sizing: border-box; }
+
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111;
         }
+
+        #panorama {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #search-overlay {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        #search-input {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 24px;
+            font-size: 14px;
+            width: 360px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            outline: none;
+            transition: box-shadow 0.2s;
+        }
+
+        #search-input:focus {
+            box-shadow: 0 4px 20px rgba(26, 115, 232, 0.5);
+        }
+
+        #search-btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 24px;
+            background: #1a73e8;
+            color: white;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            transition: background 0.2s;
+        }
+
+        #search-btn:hover  { background: #1557b0; }
+        #search-btn:disabled { background: #888; cursor: not-allowed; }
+
+        #status {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 9px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            white-space: nowrap;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: none;
+            max-width: 90vw;
+            text-align: center;
+        }
+
+        #status.visible { display: block; }
+        #status.error   { background: rgba(180, 30, 30, 0.85); }
+
+        #progress-bar {
+            position: absolute;
+            top: 0; left: 0;
+            height: 3px;
+            width: 0%;
+            background: #1a73e8;
+            z-index: 300;
+            transition: width 0.3s ease;
+            display: none;
+        }
+        #progress-bar.visible { display: block; }
     </style>
 </head>
 <body>
 
+    <div id="progress-bar"></div>
+
+    <div id="search-overlay">
+        <input id="search-input" type="text"
+               placeholder="Paste a Google Maps URL or type a location…"
+               autocomplete="off" />
+        <button id="search-btn">Go</button>
+    </div>
+
+    <div id="status"></div>
     <div id="panorama"></div>
 
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
     <script>
-    pannellum.viewer('panorama', {
-        "type": "equirectangular",
-        "panorama": "./cur_geo.jpg", /* Your image filename here */
-        "autoLoad": true,             /* Load immediately */
-        "compass": false
+    let viewer = pannellum.viewer('panorama', {
+        type: 'equirectangular',
+        panorama: './cur_geo.jpg',
+        autoLoad: true,
+        compass: false,
+        showFullscreenCtrl: true,
+        showZoomCtrl: true
+    });
+
+    const statusEl   = document.getElementById('status');
+    const progressEl = document.getElementById('progress-bar');
+    const searchInput = document.getElementById('search-input');
+    const searchBtn   = document.getElementById('search-btn');
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+    function setProgress(pct) {
+        progressEl.classList.add('visible');
+        progressEl.style.width = pct + '%';
+        if (pct >= 100) setTimeout(() => {
+            progressEl.classList.remove('visible');
+            progressEl.style.width = '0%';
+        }, 400);
+    }
+
+    function showStatus(msg, isError = false) {
+        statusEl.textContent = msg;
+        statusEl.className = 'visible' + (isError ? ' error' : '');
+    }
+
+    function hideStatus() { statusEl.className = ''; }
+
+    // ── Parse a Google Maps Street View URL ───────────────────────────────────
+    // Returns { panoId, lat, lng } — panoId may be null if not in URL.
+    // Handles formats like:
+    //   https://www.google.com/maps/@LAT,LNG,3a,..../data=!3m4!1sPANOID!...
+    //   https://maps.app.goo.gl/...  (shortened — can't parse without redirect)
+    function parseGoogleMapsUrl(raw) {
+        let url;
+        try { url = new URL(raw); } catch (_) { return null; }
+
+        if (!url.hostname.includes('google.com') && !url.hostname.includes('maps.app.goo.gl')) {
+            return null;
+        }
+
+        const result = { panoId: null, lat: null, lng: null };
+
+        // Extract lat/lng from @LAT,LNG in the path
+        const atMatch = url.pathname.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+        if (atMatch) {
+            result.lat = parseFloat(atMatch[1]);
+            result.lng = parseFloat(atMatch[2]);
+        }
+
+        // Extract pano ID from the data= segment: !1sPANO_ID!
+        // Pano IDs are alphanumeric strings (often 22 chars, but can vary)
+        const dataParam = url.searchParams.get('data') || url.hash;
+        if (dataParam) {
+            const panoMatch = dataParam.match(/!1s([A-Za-z0-9_\-]{10,})/);
+            if (panoMatch) result.panoId = panoMatch[1];
+        }
+
+        // Also check the full URL string for the !1s pattern (sometimes in path)
+        if (!result.panoId) {
+            const panoMatch = raw.match(/!1s([A-Za-z0-9_\-]{10,})/);
+            if (panoMatch) result.panoId = panoMatch[1];
+        }
+
+        return (result.panoId || result.lat) ? result : null;
+    }
+
+    // ── Geocoding via Nominatim (text search fallback) ────────────────────────
+    async function geocode(query) {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+        const res  = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await res.json();
+        if (!data.length) throw new Error('Location not found');
+        return {
+            lat:  parseFloat(data[0].lat),
+            lng:  parseFloat(data[0].lon),
+            name: data[0].display_name
+        };
+    }
+
+    // ── Get pano ID from coordinates (unofficial JSONP) ───────────────────────
+    function getPanoId(lat, lng) {
+        return new Promise((resolve, reject) => {
+            const cbName = '_gsvcb_' + Date.now();
+            const script = document.createElement('script');
+
+            const timer = setTimeout(() => { cleanup(); reject(new Error('Street View lookup timed out')); }, 10000);
+
+            function cleanup() {
+                clearTimeout(timer);
+                if (document.head.contains(script)) document.head.removeChild(script);
+                delete window[cbName];
+            }
+
+            window[cbName] = function(data) {
+                cleanup();
+                try {
+                    const panoId =
+                        (data[1] && data[1][0] && data[1][0][0] && data[1][0][0][0] && data[1][0][0][0][1]) ||
+                        (data[0] && data[0][0] && data[0][0][0] && data[0][0][0][0]);
+                    if (!panoId || typeof panoId !== 'string') throw new Error();
+                    resolve(panoId);
+                } catch (_) {
+                    reject(new Error('No Street View coverage at this location'));
+                }
+            };
+
+            script.onerror = () => { cleanup(); reject(new Error('Could not reach Street View service')); };
+            const pb = `!1m5!1sapiv3!5sUS!11m2!1m1!1b0!2m4!1m2!3d${lat}!4d${lng}!2d50!3m10!2m2!1sen!2sUS!9m1!1e2!11m4!1m3!1e2!2b1!3e2!4m10!1e1!1e2!1e3!1e4!1e8!1e6`;
+            script.src = `https://maps.googleapis.com/maps/api/js/GeoPhotoService.SingleImageSearch?pb=${pb}&callback=${cbName}`;
+            document.head.appendChild(script);
+        });
+    }
+
+    // ── Fetch & stitch panorama tiles ─────────────────────────────────────────
+    async function stitchPanorama(panoId, onProgress) {
+        const ZOOM = 3;                      // 8×4 tiles → ~4096×2048 equirectangular
+        const cols = Math.pow(2, ZOOM);      // 8
+        const rows = Math.pow(2, ZOOM - 1);  // 4
+        const total = cols * rows;
+        let loaded = 0;
+
+        function tileUrl(x, y) {
+            return `https://cbk0.google.com/cbk?output=tile&panoid=${panoId}&zoom=${ZOOM}&x=${x}&y=${y}`;
+        }
+
+        // Load first tile to detect natural tile size
+        const firstImg = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload  = () => resolve(img);
+            img.onerror = () => reject(new Error('Tile load failed — this may be a CORS restriction'));
+            img.src = tileUrl(0, 0);
+        });
+
+        const tileW = firstImg.naturalWidth  || 512;
+        const tileH = firstImg.naturalHeight || 512;
+
+        const canvas = document.createElement('canvas');
+        canvas.width  = cols * tileW;
+        canvas.height = rows * tileH;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(firstImg, 0, 0);
+        onProgress(++loaded / total);
+
+        const remaining = [];
+        for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+                if (x === 0 && y === 0) continue;
+                const cx = x, cy = y;
+                remaining.push(new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        ctx.drawImage(img, cx * tileW, cy * tileH);
+                        onProgress(++loaded / total);
+                        resolve();
+                    };
+                    img.onerror = () => reject(new Error('Tile load failed — this may be a CORS restriction'));
+                    img.src = tileUrl(cx, cy);
+                }));
+            }
+        }
+
+        await Promise.all(remaining);
+
+        try {
+            return canvas.toDataURL('image/jpeg', 0.92);
+        } catch (e) {
+            if (e.name === 'SecurityError') {
+                throw new Error('CORS blocked canvas export — try running via a local server');
+            }
+            throw e;
+        }
+    }
+
+    // ── Main flow ─────────────────────────────────────────────────────────────
+    async function loadLocation(input) {
+        searchBtn.disabled = true;
+        try {
+            setProgress(5);
+            let panoId = null;
+            let label  = input;
+
+            // Try parsing as a Google Maps URL first
+            const parsed = parseGoogleMapsUrl(input.trim());
+
+            if (parsed && parsed.panoId) {
+                // Best case: pano ID is directly in the URL
+                panoId = parsed.panoId;
+                label  = `${parsed.lat?.toFixed(4)}, ${parsed.lng?.toFixed(4)}`;
+                setProgress(25);
+
+            } else if (parsed && parsed.lat) {
+                // URL has coordinates but no pano ID — look it up
+                showStatus('Finding Street View coverage…');
+                panoId = await getPanoId(parsed.lat, parsed.lng);
+                label  = `${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)}`;
+                setProgress(25);
+
+            } else {
+                // Plain text — geocode then look up coverage
+                showStatus('Searching for location…');
+                const geo = await geocode(input.trim());
+                setProgress(15);
+
+                showStatus('Finding Street View coverage…');
+                panoId = await getPanoId(geo.lat, geo.lng);
+                label  = geo.name.split(',').slice(0, 2).join(',').trim();
+                setProgress(25);
+            }
+
+            showStatus('Loading panorama tiles…');
+            const dataUrl = await stitchPanorama(panoId, frac => {
+                setProgress(25 + frac * 70);
+                showStatus(`Loading panorama… ${Math.round(frac * 100)}%`);
+            });
+
+            setProgress(98);
+            viewer.destroy();
+            viewer = pannellum.viewer('panorama', {
+                type: 'equirectangular',
+                panorama: dataUrl,
+                autoLoad: true,
+                compass: false,
+                showFullscreenCtrl: true,
+                showZoomCtrl: true
+            });
+
+            setProgress(100);
+            showStatus(label);
+            setTimeout(hideStatus, 3500);
+
+        } catch (err) {
+            setProgress(100);
+            showStatus(err.message, true);
+            setTimeout(hideStatus, 5000);
+        } finally {
+            searchBtn.disabled = false;
+        }
+    }
+
+    searchBtn.addEventListener('click', () => {
+        const q = searchInput.value.trim();
+        if (q) loadLocation(q);
+    });
+
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            const q = searchInput.value.trim();
+            if (q) loadLocation(q);
+        }
     });
     </script>
 

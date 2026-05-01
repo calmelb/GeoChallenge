@@ -85,7 +85,10 @@ def get_pano_id(lat: float, lng: float) -> str:
 # ── Tile fetching & stitching ─────────────────────────────────────────────────
 
 def tile_url(pano_id: str, zoom: int, x: int, y: int) -> str:
-    return f"https://cbk0.google.com/cbk?output=tile&panoid={pano_id}&zoom={zoom}&x={x}&y={y}"
+    return (
+        f"https://streetviewpixels-pa.googleapis.com/v1/tile"
+        f"?cb_client=maps_sv.tactile&panoid={pano_id}&x={x}&y={y}&zoom={zoom}"
+    )
 
 
 def fetch_panorama(pano_id: str) -> Image.Image:
@@ -94,6 +97,12 @@ def fetch_panorama(pano_id: str) -> Image.Image:
     total = cols * rows
 
     session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": "https://www.google.com/",
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    })
 
     # Fetch first tile to determine tile dimensions
     resp = session.get(tile_url(pano_id, TILE_ZOOM, 0, 0), timeout=15)

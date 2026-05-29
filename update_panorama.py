@@ -18,6 +18,7 @@ Requirements:
 import re
 import sys
 import json
+import time
 import math
 import subprocess
 from io import BytesIO
@@ -91,6 +92,31 @@ def tile_url(pano_id: str, zoom: int, x: int, y: int) -> str:
     )
 
 
+# Transient HTTP statuses worth retrying (server hiccups / rate limiting)
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+MAX_RETRIES = 5
+
+
+def get_tile(session: requests.Session, pano_id: str, zoom: int, x: int, y: int) -> Image.Image:
+    """Fetch a single tile, retrying transient server errors with backoff."""
+    url = tile_url(pano_id, zoom, x, y)
+    last_err = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = session.get(url, timeout=15)
+            if resp.status_code in RETRY_STATUSES:
+                raise requests.HTTPError(f"{resp.status_code} {resp.reason}", response=resp)
+            resp.raise_for_status()
+            return Image.open(BytesIO(resp.content))
+        except (requests.RequestException, OSError) as err:
+            last_err = err
+            if attempt < MAX_RETRIES - 1:
+                wait = 1.5 * (2 ** attempt)  # 1.5, 3, 6, 12s …
+                print(f"      tile {x},{y} failed ({err}); retrying in {wait:.0f}s")
+                time.sleep(wait)
+    raise RuntimeError(f"tile {x},{y} failed after {MAX_RETRIES} attempts: {last_err}")
+
+
 def fetch_panorama(pano_id: str) -> Image.Image:
     cols = int(math.pow(2, TILE_ZOOM))      # 8
     rows = int(math.pow(2, TILE_ZOOM - 1))  # 4
@@ -105,9 +131,7 @@ def fetch_panorama(pano_id: str) -> Image.Image:
     })
 
     # Fetch first tile to determine tile dimensions
-    resp = session.get(tile_url(pano_id, TILE_ZOOM, 0, 0), timeout=15)
-    resp.raise_for_status()
-    first_tile = Image.open(BytesIO(resp.content))
+    first_tile = get_tile(session, pano_id, TILE_ZOOM, 0, 0)
     tile_w, tile_h = first_tile.size
 
     canvas = Image.new("RGB", (cols * tile_w, rows * tile_h))
@@ -120,9 +144,7 @@ def fetch_panorama(pano_id: str) -> Image.Image:
         for x in range(cols):
             if x == 0 and y == 0:
                 continue
-            resp = session.get(tile_url(pano_id, TILE_ZOOM, x, y), timeout=15)
-            resp.raise_for_status()
-            tile = Image.open(BytesIO(resp.content))
+            tile = get_tile(session, pano_id, TILE_ZOOM, x, y)
             canvas.paste(tile, (x * tile_w, y * tile_h))
             fetched += 1
             print(f"  [{fetched:2d}/{total}] tile {x},{y}")

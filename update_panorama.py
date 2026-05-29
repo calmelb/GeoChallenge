@@ -3,7 +3,7 @@
 Fetch a Google Street View panorama and save it to the repo.
 
 Usage:
-    python update_panorama.py "<google_maps_url>"
+    python update_panorama.py "<google_maps_url>" [--zoom 0-5]
 
 Saves:
     cur_geo.jpg              — overwrites the current panorama
@@ -20,6 +20,7 @@ import sys
 import json
 import time
 import math
+import argparse
 import subprocess
 from io import BytesIO
 from pathlib import Path
@@ -29,7 +30,7 @@ from PIL import Image
 
 
 REPO_DIR = Path(__file__).parent
-TILE_ZOOM = 3          # 8×4 = 32 tiles → ~4096×2048 equirectangular
+TILE_ZOOM = 5          # 32×16 = 512 tiles → 16384×8192 equirectangular (max quality)
 JPEG_QUALITY = 92
 
 
@@ -117,9 +118,9 @@ def get_tile(session: requests.Session, pano_id: str, zoom: int, x: int, y: int)
     raise RuntimeError(f"tile {x},{y} failed after {MAX_RETRIES} attempts: {last_err}")
 
 
-def fetch_panorama(pano_id: str) -> Image.Image:
-    cols = int(math.pow(2, TILE_ZOOM))      # 8
-    rows = int(math.pow(2, TILE_ZOOM - 1))  # 4
+def fetch_panorama(pano_id: str, zoom: int = TILE_ZOOM) -> Image.Image:
+    cols = int(math.pow(2, zoom))      # 2^zoom
+    rows = int(math.pow(2, zoom - 1))  # 2^(zoom-1)
     total = cols * rows
 
     session = requests.Session()
@@ -131,7 +132,7 @@ def fetch_panorama(pano_id: str) -> Image.Image:
     })
 
     # Fetch first tile to determine tile dimensions
-    first_tile = get_tile(session, pano_id, TILE_ZOOM, 0, 0)
+    first_tile = get_tile(session, pano_id, zoom, 0, 0)
     tile_w, tile_h = first_tile.size
 
     canvas = Image.new("RGB", (cols * tile_w, rows * tile_h))
@@ -144,7 +145,7 @@ def fetch_panorama(pano_id: str) -> Image.Image:
         for x in range(cols):
             if x == 0 and y == 0:
                 continue
-            tile = get_tile(session, pano_id, TILE_ZOOM, x, y)
+            tile = get_tile(session, pano_id, zoom, x, y)
             canvas.paste(tile, (x * tile_w, y * tile_h))
             fetched += 1
             print(f"  [{fetched:2d}/{total}] tile {x},{y}")
@@ -175,11 +176,22 @@ def git(*args):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python update_panorama.py \"<google_maps_url>\"")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Fetch a Google Street View panorama and save it to the repo."
+    )
+    parser.add_argument("url", help="Google Maps Street View URL")
+    parser.add_argument(
+        "-z", "--zoom", type=int, default=TILE_ZOOM,
+        help=f"Tile zoom / quality level, 0–5 (default: {TILE_ZOOM}). "
+             "5=16384×8192, 4=8192×4096, 3=4096×2048. Higher is sharper but slower.",
+    )
+    args = parser.parse_args()
 
-    raw_url = sys.argv[1]
+    if not 0 <= args.zoom <= 5:
+        parser.error("--zoom must be between 0 and 5")
+
+    raw_url = args.url
+    zoom = args.zoom
 
     print("Parsing URL…")
     parsed = parse_maps_url(raw_url)
@@ -194,8 +206,8 @@ def main():
 
     print(f"Pano ID: {pano_id}")
 
-    print(f"\nFetching tiles (zoom={TILE_ZOOM}, {2**TILE_ZOOM}×{2**(TILE_ZOOM-1)} grid)…")
-    image = fetch_panorama(pano_id)
+    print(f"\nFetching tiles (zoom={zoom}, {2**zoom}×{2**(zoom-1)} grid)…")
+    image = fetch_panorama(pano_id, zoom)
     print(f"Stitched: {image.width}×{image.height}px")
 
     archive_name = next_filename()
